@@ -1,0 +1,18 @@
+[
+    {
+        "fecha": "2025-05-06",
+        "cliente": "Juan Pérez",
+        "servicio": "Mudanza completa",
+        "horario": "De 08:00 a 10:00",
+        "kilometraje": 25,
+        "observaciones": "Todo salió bien, sin daños."
+    },
+    {
+        "fecha": "2025-05-07",
+        "cliente": "María López",
+        "servicio": "Carga y descarga",
+        "horario": "De 11:00 a 13:00",
+        "kilometraje": 15,
+        "observaciones": "Se tardó un poco debido al tráfico."
+    }
+]

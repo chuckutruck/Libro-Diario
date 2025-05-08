@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Libro Diario</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 1rem;
+      background-color: #f3f4f6;
+    }
+
+    form, .registros {
+      background: white;
+      padding: 1rem;
+      border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      margin: 1rem auto;
+      max-width: 900px;
+    }
+
+    h1, h2 {
+      text-align: center;
+    }
+
+    label {
+      font-weight: bold;
+      margin-top: 1rem;
+      display: block;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 0.5rem;
+      margin-top: 0.5rem;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+
+    th, td {
+      border: 1px solid #ddd;
+      padding: 0.5rem;
+      text-align: left;
+    }
+
+    th {
+      background-color: #f9fafb;
+    }
+
+    button {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      padding: 0.75rem;
+      margin-top: 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .acciones button {
+      background-color: #fbbf24;
+      margin-right: 5px;
+    }
+
+    .acciones button.eliminar {
+      background-color: #ef4444;
+    }
+
+    .acciones {
+      display: flex;
+    }
+
+    .fecha-grupo {
+      margin-top: 2rem;
+    }
+
+    .collapsible {
+      background-color: #eee;
+      color: #444;
+      cursor: pointer;
+      padding: 1rem;
+      width: 100%;
+      border: none;
+      text-align: left;
+      outline: none;
+      font-size: 1.1em;
+      border-radius: 5px;
+      margin-top: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .collapsible::after {
+      content: '▶';
+      transition: transform 0.3s;
+    }
+
+    .collapsible.active::after {
+      transform: rotate(90deg);
+    }
+
+    .collapsible-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease-out;
+    }
+
+    .filter-container {
+      display: flex;
+      gap: 1rem;
+      margin: 1rem 0;
+    }
+
+    .filter-container select {
+      width: auto;
+      padding: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Libro Diario Fabian Atiencia</h1>
+
+  <form id="mudanzaForm">
+    <label for="fecha">Fecha</label>
+    <input type="date" id="fecha" required />
+
+    <label for="cliente">Cliente o Dirección</label>
+    <input type="text" id="cliente" required />
+
+    <label for="servicio">Tipo de Servicio</label>
+    <select id="servicio" required>
+      <option value="Mudanza completa">Mudanza completa</option>
+      <option value="Carga y descarga">Carga y descarga</option>
+      <option value="Embalaje">Embalaje</option>
+      <option value="Transporte de muebles">Transporte de muebles</option>
+      <option value="Otro">Otro</option>
+    </select>
+
+    <label for="horarioInicio">Horario</label>
+    <input type="time" id="horarioInicio" required /> a
+    <input type="time" id="horarioFin" required />
+
+    <label for="observaciones">Observaciones</label>
+    <textarea id="observaciones" rows="2"></textarea>
+
+    <label for="companeros">Compañeros de trabajo (si hubo)</label>
+    <input type="text" id="companeros" />
+
+    <input type="hidden" id="editIndex" />
+    <input type="hidden" id="editFecha" />
+
+    <button type="submit">Guardar Registro</button>
+  </form>
+
+  <div class="registros">
+    <h2>Registros Guardados</h2>
+    <div id="listaRegistros"></div>
+    <h2>Resumen de Horas</h2>
+    <table id="resumenHoras" style="display:none;">
+      <thead>
+        <tr><th>Fecha</th><th>Total Horas</th></tr>
+      </thead>
+      <tbody></tbody>
+      <tfoot>
+        <tr><th>Total del Mes</th><th id="totalMes">0</th></tr>
+      </tfoot>
+    </table>
+    
+    <div class="filter-container">
+      <select id="pdfMonth">
+        <option value="">Todos los meses</option>
+        <option value="01">Enero</option>
+        <option value="02">Febrero</option>
+        <option value="03">Marzo</option>
+        <option value="04">Abril</option>
+        <option value="05">Mayo</option>
+        <option value="06">Junio</option>
+        <option value="07">Julio</option>
+        <option value="08">Agosto</option>
+        <option value="09">Septiembre</option>
+        <option value="10">Octubre</option>
+        <option value="11">Noviembre</option>
+        <option value="12">Diciembre</option>
+      </select>
+      
+      <select id="pdfYear">
+        <option value="">Todos los años</option>
+      </select>
+    </div>
+    
+    <button onclick="exportarPDF()">📄 Exportar a PDF</button>
+  </div>
+
+  <script>
+    const form = document.getElementById('mudanzaForm');
+    const listaRegistros = document.getElementById('listaRegistros');
+    const nombreUsuario = "Fabian Atiencia";
+
+    function toggleCollapse(element) {
+      element.classList.toggle("active");
+      const content = element.nextElementSibling;
+      content.style.maxHeight = content.style.maxHeight ? null : content.scrollHeight + "px";
+    }
+
+    function convertirHorario(horario) {
+      return horario.replace('De ', '').replace(' a ', ' - ');
+    }
+
+    function agruparPorFecha(registros) {
+      return registros.reduce((acc, r) => {
+        if (!acc[r.fecha]) acc[r.fecha] = [];
+        acc[r.fecha].push(r);
+        return acc;
+      }, {});
+    }
+
+    function calcularHoras(inicio, fin) {
+      const [h1, m1] = inicio.split(':').map(Number);
+      const [h2, m2] = fin.split(':').map(Number);
+      const d1 = new Date(0, 0, 0, h1, m1);
+      const d2 = new Date(0, 0, 0, h2, m2);
+      const diff = (d2 - d1) / 3600000;
+      return diff > 0 ? diff : 0;
+    }
+
+    function cargarRegistros() {
+      let registros = JSON.parse(localStorage.getItem('registrosMudanza')) || [];
+      
+      // Convertir registros antiguos
+      registros = registros.map(r => {
+        if(typeof r.horario === 'string' && r.horario.includes('De')) {
+          return {
+            ...r,
+            horario: convertirHorario(r.horario),
+            companeros: r.companeros || 'Ninguno',
+            kilometraje: r.kilometraje || 0
+          };
+        }
+        return r;
+      });
+
+      const porFecha = agruparPorFecha(registros);
+      listaRegistros.innerHTML = '';
+
+      if (registros.length === 0) {
+        listaRegistros.innerHTML = '<p style="text-align:center;">No hay registros aún.</p>';
+        document.getElementById('resumenHoras').style.display = 'none';
+        return;
+      }
+
+      const hoy = new Date().toISOString().split('T')[0];
+      const sortedDates = Object.keys(porFecha).sort().reverse();
+
+      sortedDates.forEach(fecha => {
+        const contenedor = document.createElement('div');
+        contenedor.className = 'fecha-grupo';
+
+        const tableContent = `
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Cliente</th>
+                <th>Servicio</th>
+                <th>Horario</th>
+                <th>Horas</th>
+                <th>Kilometraje</th>
+                <th>Observaciones</th>
+                <th>Compañeros</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${porFecha[fecha].map((r, i) => {
+                const [inicio, fin] = r.horario.split(' - ');
+                const horas = calcularHoras(inicio, fin).toFixed(2);
+                return `
+                  <tr>
+                    <td>${i + 1}</td>
+                    <td>${r.cliente}</td>
+                    <td>${r.servicio}</td>
+                    <td>${r.horario}</td>
+                    <td>${horas}</td>
+                    <td>${r.kilometraje || 0}</td>
+                    <td>${r.observaciones || 'Ninguna'}</td>
+                    <td>${r.companeros || 'Ninguno'}</td>
+                    <td class="acciones">
+                      <button onclick="editarRegistro('${fecha}', ${i})">✏️</button>
+                      <button class="eliminar" onclick="eliminarRegistro('${fecha}', ${i})">🗑️</button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        `;
+
+        if (fecha === hoy) {
+          contenedor.innerHTML = `<h3>${fecha}</h3>${tableContent}`;
+        } else {
+          contenedor.innerHTML = `
+            <button class="collapsible" onclick="toggleCollapse(this)">${fecha} ▶</button>
+            <div class="collapsible-content">${tableContent}</div>
+          `;
+        }
+
+        listaRegistros.appendChild(contenedor);
+      });
+
+      actualizarFiltroAnos();
+      mostrarResumenHoras(porFecha);
+    }
+
+    function actualizarFiltroAnos() {
+      const registros = JSON.parse(localStorage.getItem('registrosMudanza')) || [];
+      const years = [...new Set(registros.map(r => r.fecha.split('-')[0]))];
+      const select = document.getElementById('pdfYear');
+      
+      select.innerHTML = '<option value="">Todos los años</option>';
+      years.forEach(year => {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year;
+        select.appendChild(option);
+      });
+    }
+
+    function mostrarResumenHoras(porFecha) {
+      const tbody = document.querySelector('#resumenHoras tbody');
+      const tabla = document.getElementById('resumenHoras');
+      let totalMes = 0;
+      tbody.innerHTML = '';
+
+      Object.keys(porFecha).sort().forEach(fecha => {
+        const totalDia = porFecha[fecha].reduce((sum, r) => {
+          const [inicio, fin] = r.horario.split(' - ');
+          return sum + calcularHoras(inicio, fin);
+        }, 0);
+        totalMes += totalDia;
+        const fila = document.createElement('tr');
+        fila.innerHTML = `<td>${fecha}</td><td>${totalDia.toFixed(2)}</td>`;
+        tbody.appendChild(fila);
+      });
+
+      document.getElementById('totalMes').textContent = totalMes.toFixed(2);
+      tabla.style.display = 'table';
+    }
+
+    function guardarRegistro(e) {
+      e.preventDefault();
+      const fecha = document.getElementById('fecha').value;
+      const nuevo = {
+        fecha,
+        cliente: document.getElementById('cliente').value,
+        servicio: document.getElementById('servicio').value,
+        horario: `${document.getElementById('horarioInicio').value} - ${document.getElementById('horarioFin').value}`,
+        observaciones: document.getElementById('observaciones').value.trim(),
+        companeros: document.getElementById('companeros').value.trim(),
+        kilometraje: 0 // Campo adicional para compatibilidad
+      };
+
+      let registros = JSON.parse(localStorage.getItem('registrosMudanza')) || [];
+      const editIndex = document.getElementById('editIndex').value;
+      const editFecha = document.getElementById('editFecha').value;
+
+      if (editIndex) {
+        const grupo = registros.filter(r => r.fecha === editFecha);
+        const allIndexes = registros.reduce((acc, r, i) => {
+          if (r.fecha === editFecha) acc.push(i);
+          return acc;
+        }, []);
+        registros[allIndexes[editIndex]] = nuevo;
+      } else {
+        registros.push(nuevo);
+      }
+
+      localStorage.setItem('registrosMudanza', JSON.stringify(registros));
+      form.reset();
+      document.getElementById('editIndex').value = '';
+      document.getElementById('editFecha').value = '';
+      precargarFecha();
+      cargarRegistros();
+      alert('✅ Registro guardado');
+    }
+
+    function editarRegistro(fecha, index) {
+      const registros = JSON.parse(localStorage.getItem('registrosMudanza')) || [];
+      const grupo = registros.filter(r => r.fecha === fecha);
+      const r = grupo[index];
+      const [inicio, fin] = r.horario.split(' - ');
+      document.getElementById('fecha').value = r.fecha;
+      document.getElementById('cliente').value = r.cliente;
+      document.getElementById('servicio').value = r.servicio;
+      document.getElementById('horarioInicio').value = inicio;
+      document.getElementById('horarioFin').value = fin;
+      document.getElementById('observaciones').value = r.observaciones;
+      document.getElementById('companeros').value = r.companeros;
+      document.getElementById('editIndex').value = index;
+      document.getElementById('editFecha').value = fecha;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function eliminarRegistro(fecha, index) {
+      if (!confirm('¿Eliminar este registro?')) return;
+      let registros = JSON.parse(localStorage.getItem('registrosMudanza')) || [];
+      const grupo = registros.filter(r => r.fecha === fecha);
+      const allIndexes = registros.reduce((acc, r, i) => {
+        if (r.fecha === fecha) acc.push(i);
+        return acc;
+      }, []);
+      registros.splice(allIndexes[index], 1);
+      localStorage.setItem('registrosMudanza', JSON.stringify(registros));
+      cargarRegistros();
+    }
+
+    function precargarFecha() {
+      const hoy = new Date().toISOString().split('T')[0];
+      document.getElementById('fecha').value = hoy;
+      const ahora = new Date();
+      const inicio = ahora.toTimeString().slice(0,5);
+      const fin = new Date(ahora.getTime() + 60 * 60 * 1000).toTimeString().slice(0,5);
+      document.getElementById('horarioInicio').value = inicio;
+      document.getElementById('horarioFin').value = fin;
+    }
+
+    function exportarPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      const mesSeleccionado = document.getElementById('pdfMonth').value;
+      const anoSeleccionado = document.getElementById('pdfYear').value;
+      
+      let registros = JSON.parse(localStorage.getItem('registrosMudanza')) || [];
+      
+      registros = registros.filter(r => {
+        const [ano, mes] = r.fecha.split('-');
+        return (!mesSeleccionado || mes === mesSeleccionado) && 
+               (!anoSeleccionado || ano === anoSeleccionado);
+      });
+
+      const agrupados = agruparPorFecha(registros);
+      let y = 15;
+
+      doc.setFontSize(16);
+      doc.text(`Libro Diario - ${nombreUsuario}`, 14, y);
+      y += 10;
+
+      Object.keys(agrupados).sort().forEach(fecha => {
+        const body = agrupados[fecha].map((r, i) => {
+          const [inicio, fin] = r.horario.split(' - ');
+          const horas = calcularHoras(inicio, fin).toFixed(2);
+          return [
+            (i + 1).toString(),
+            r.cliente,
+            r.servicio,
+            r.horario,
+            horas,
+            r.kilometraje || '0',
+            r.observaciones || 'Ninguna',
+            r.companeros || 'Ninguno'
+          ];
+        });
+
+        doc.setFontSize(12);
+        doc.text(`Fecha: ${fecha}`, 14, y);
+        y += 5;
+
+        doc.autoTable({
+          head: [['#', 'Cliente', 'Servicio', 'Horario', 'Horas', 'Kilometraje', 'Observaciones', 'Compañeros']],
+          body: body,
+          startY: y,
+          theme: 'grid',
+          styles: { fontSize: 10 },
+          headStyles: { fillColor: [37, 99, 235], textColor: 255 },
+          margin: { left: 14, right: 14 },
+          didDrawPage: (data) => {
+            y = data.cursor.y + 10;
+          }
+        });
+      });
+
+      const porFecha = agruparPorFecha(registros);
+      const resumen = Object.entries(porFecha).map(([fecha, lista]) => {
+        const total = lista.reduce((sum, r) => {
+          const [inicio, fin] = r.horario.split(' - ');
+          return sum + calcularHoras(inicio, fin);
+        }, 0);
+        return [fecha, total.toFixed(2)];
+      });
+
+      const totalMes = resumen.reduce((sum, fila) => sum + parseFloat(fila[1]), 0);
+      resumen.push(['Total', totalMes.toFixed(2)]);
+
+      doc.autoTable({
+        head: [['Fecha', 'Horas']],
+        body: resumen,
+        startY: y,
+        theme: 'grid',
+        styles: { fontSize: 10 },
+        headStyles: { fillColor: [16, 185, 129], textColor: 255 },
+        margin: { left: 14, right: 14 }
+      });
+
+      doc.save(`libro_diario_${nombreUsuario.replace(/\s/g, '_')}.pdf`);
+    }
+
+    window.onload = () => {
+      precargarFecha();
+      cargarRegistros();
+      form.addEventListener('submit', guardarRegistro);
+    };
+  </script>
+</body>
+</html>
